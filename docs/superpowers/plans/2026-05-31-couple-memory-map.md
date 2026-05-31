@@ -10,6 +10,17 @@
 
 ---
 
+## Execution Note
+
+During implementation on 2026-06-01, the local environment could run the bundled Node runtime but did not have a usable `npm`, and the system `node.exe` was denied by Windows. To keep the app buildable and testable in this workspace, the implementation switched to a zero-dependency Node app:
+
+- Node built-in HTTP server instead of Express.
+- JSON file persistence instead of SQLite.
+- Node built-in test runner instead of Vitest.
+- Native browser HTML/CSS/JS instead of React/Vite.
+
+The product scope remains the same: two-user registration, couple-space binding, shared memories, photos, filtering, permission checks, and a mobile-first map-style interface.
+
 ## Scope Check
 
 The design covers one cohesive MVP: account binding, shared map, memory CRUD, photos, filtering, permissions, and map degradation. These pieces are not useful as separate shipped products, so this plan keeps them together while breaking implementation into independently testable tasks.
