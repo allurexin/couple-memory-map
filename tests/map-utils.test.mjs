@@ -1,6 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { normalizePlaceSearchResults, renderableMapPoints } from "../app/public/map-utils.mjs";
+import {
+  homeMapView,
+  normalizePlaceSearchResults,
+  renderableMapPoints
+} from "../app/public/map-utils.mjs";
 
 describe("renderableMapPoints", () => {
   it("includes the searched draft shop as a visible map point", () => {
@@ -86,5 +90,21 @@ describe("normalizePlaceSearchResults", () => {
         longitude: 120.16
       }
     ]);
+  });
+});
+
+describe("homeMapView", () => {
+  it("uses the most frequent city as the default home map", () => {
+    const memories = [
+      { id: "1", city: "合肥市", memoryDate: "2026-05-03", createdAt: "2026-05-03T00:00:00.000Z", latitude: 31.86, longitude: 117.28 },
+      { id: "2", city: "杭州市", memoryDate: "2026-05-01", createdAt: "2026-05-01T00:00:00.000Z", latitude: 30.26, longitude: 120.16 },
+      { id: "3", city: "合肥市", memoryDate: "2026-05-02", createdAt: "2026-05-02T00:00:00.000Z", latitude: 31.84, longitude: 117.26 }
+    ];
+
+    const view = homeMapView(memories);
+
+    assert.equal(view.city, "合肥市");
+    assert.deepEqual(view.memories.map((memory) => memory.id), ["1", "3"]);
+    assert.deepEqual(view.route.map((memory) => memory.id), ["3", "1"]);
   });
 });

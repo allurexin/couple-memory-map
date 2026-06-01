@@ -1,5 +1,6 @@
 import { filterMemories } from "./filter.mjs";
 import { normalizePlaceSearchResults, renderableMapPoints } from "./map-utils.mjs";
+import { homeMapView } from "./map-utils.mjs";
 
 const app = document.querySelector("#app");
 const state = {
@@ -112,7 +113,11 @@ function createAmapMarkerContent(point) {
   return `<div class="amap-memory-marker ${point.revisitStatus}" title="${escapeHtml(point.title)}"><span>${point.rating}</span></div>`;
 }
 
-async function mountAmapMap(memories) {
+function placeLabel(place) {
+  return [place.city, place.district, place.address].filter(Boolean).join(" · ");
+}
+
+async function mountAmapMap(memories, route = []) {
   const root = document.querySelector("#amapRoot");
   if (!root) return;
   try {
@@ -121,12 +126,14 @@ async function mountAmapMap(memories) {
     const centerMemory = state.selected || state.draft || state.searchedPlace || memories[0];
     const center = centerMemory ? [Number(centerMemory.longitude), Number(centerMemory.latitude)] : [120.161, 30.266];
     const points = renderableMapPoints(memories, state.draft, state.searchedPlace);
+    const shouldFitHome = !state.selected && !state.draft && !state.searchedPlace;
     const map = new AMap.Map(root, {
       zoom: centerMemory ? 14 : 11,
       center,
       viewMode: "2D"
     });
     map.addControl(new AMap.Scale());
+    const markers = [];
     points.forEach((point) => {
       const marker = new AMap.Marker({
         position: [point.longitude, point.latitude],
@@ -148,8 +155,21 @@ async function mountAmapMap(memories) {
         renderMap();
       });
       map.add(marker);
+      markers.push(marker);
     });
-    if (points.length > 1 && !state.draft) map.setFitView();
+    if (route.length > 1) {
+      const path = route.map((memory) => [Number(memory.longitude), Number(memory.latitude)]);
+      const polyline = new AMap.Polyline({
+        path,
+        strokeColor: "#1769e0",
+        strokeOpacity: 0.72,
+        strokeWeight: 5,
+        lineJoin: "round",
+        lineCap: "round"
+      });
+      map.add(polyline);
+    }
+    if (shouldFitHome && markers.length > 1) map.setFitView(markers, false, [90, 450, 90, 90]);
     map.on("click", (event) => {
       state.selected = null;
       state.searchedPlace = null;
@@ -157,7 +177,9 @@ async function mountAmapMap(memories) {
         placeName: document.querySelector("#searchPlace")?.value || "手动选择的位置",
         latitude: Number(event.lnglat.lat.toFixed(6)),
         longitude: Number(event.lnglat.lng.toFixed(6)),
-        city: ""
+        city: "",
+        district: "",
+        address: ""
       };
       renderMap();
     });
@@ -354,6 +376,10 @@ function markerPosition(memory) {
 function renderMap() {
   const filtered = filterMemories(state.memories, state.filters);
   const useAmap = state.config.hasAmapConfig;
+  const homeView = homeMapView(filtered);
+  const activePlace = state.selected || state.draft || state.searchedPlace;
+  const mapMemories = activePlace ? filtered : homeView.memories;
+  const route = activePlace ? [] : homeView.route;
   app.innerHTML = `
     <main class="map-screen">
       <header class="map-header">
@@ -364,7 +390,7 @@ function renderMap() {
         <button id="logout">退出</button>
       </header>
       <section class="map-canvas" id="mapCanvas">
-        ${useAmap ? '<div class="amap-root" id="amapRoot"></div><div class="map-hint">输入完整店名后点搜索，选择候选地点即可定位。</div>' : '<div class="map-hint">点击地图任意位置添加记忆；配置高德 Key 后可接入真实地图搜索。</div>'}
+        ${useAmap ? `<div class="amap-root" id="amapRoot"></div><div class="map-hint">${homeView.city && !activePlace ? `常去地图：${escapeHtml(homeView.city)} · ${homeView.memories.length} 个打卡点` : "输入完整店名后点搜索，选择候选地点即可定位。"}</div>` : '<div class="map-hint">点击地图任意位置添加记忆；配置高德 Key 后可接入真实地图搜索。</div>'}
         ${useAmap ? "" : state.memories
           .map(
             (memory) => `
@@ -381,7 +407,7 @@ function renderMap() {
 
   document.querySelector("#logout").addEventListener("click", logout);
   if (useAmap) {
-    mountAmapMap(filtered);
+    mountAmapMap(mapMemories, route);
   } else {
     document.querySelector("#mapCanvas").addEventListener("click", (event) => {
       if (event.target.closest(".pin")) return;
@@ -393,7 +419,9 @@ function renderMap() {
         placeName: document.querySelector("#searchPlace")?.value || "手动选择的位置",
         latitude: Number((18 + y * 28).toFixed(6)),
         longitude: Number((98 + x * 34).toFixed(6)),
-        city: ""
+        city: "",
+        district: "",
+        address: ""
       };
       renderMap();
     });
@@ -430,7 +458,7 @@ function renderSheet(filtered) {
               </button>
             `).join("")}</div>`
         : state.searchedPlace
-          ? `<section class="search-result"><strong>${escapeHtml(state.searchedPlace.placeName)}</strong><span>${escapeHtml(state.searchedPlace.city || "已定位到地图")}</span><button class="primary" id="addSearchedPlace">添加这家店的记忆</button></section>`
+          ? `<section class="search-result"><strong>${escapeHtml(state.searchedPlace.placeName)}</strong><span>${escapeHtml(placeLabel(state.searchedPlace) || "已定位到地图")}</span><button class="primary" id="addSearchedPlace">添加这家店的记忆</button></section>`
           : ""
     }
     <div class="sheet-controls">
@@ -452,7 +480,7 @@ function renderSheet(filtered) {
                   <button class="memory-row" data-id="${memory.id}">
                     <strong>${escapeHtml(memory.placeName)}</strong>
                     <span>${escapeHtml(memory.foodItems.join("、") || "还没有记录菜品")}</span>
-                    <span>${memory.rating} 分 · ${statusText[memory.revisitStatus]} · ${escapeHtml(memory.city || "未知城市")}</span>
+                    <span>${memory.rating} 分 · ${statusText[memory.revisitStatus]} · ${escapeHtml(placeLabel(memory) || memory.city || "未知地点")}</span>
                   </button>
                 `
               )
@@ -464,10 +492,11 @@ function renderSheet(filtered) {
 }
 
 function renderMemoryForm(draft) {
+  const locationText = placeLabel(draft) || "已通过地图点位确定";
   return `
     <h2>添加美食记忆</h2>
     <label class="field">店名<input id="placeName" value="${escapeHtml(draft.placeName)}" /></label>
-    <label class="field">城市<input id="city" value="${escapeHtml(draft.city || "")}" /></label>
+    <section class="location-summary"><strong>地点</strong><span>${escapeHtml(locationText)}</span></section>
     <label class="field">菜品<input id="foodItems" placeholder="牛肉, 冰粉" /></label>
     <label class="field">日期<input id="memoryDate" type="date" value="${new Date().toISOString().slice(0, 10)}" /></label>
     <label class="field">评分<select id="rating">${[5, 4, 3, 2, 1].map((rating) => `<option value="${rating}">${rating} 分</option>`).join("")}</select></label>
@@ -484,6 +513,7 @@ function renderMemoryDetail(memory) {
     <section class="detail">
       <h2>${escapeHtml(memory.placeName)}</h2>
       <p class="muted">${memory.rating} 分 · ${statusText[memory.revisitStatus]} · ${escapeHtml(memory.memoryDate)}</p>
+      <p class="muted">${escapeHtml(placeLabel(memory) || memory.city || "未记录地点详情")}</p>
       <p>${escapeHtml(memory.foodItems.join("、") || "还没有记录菜品")}</p>
       <p>${escapeHtml(memory.notes || "没有备注")}</p>
       <div class="photo-strip">${(memory.photos || []).map((photo) => `<img src="${photo.thumbnailUrl}" alt="${escapeHtml(memory.placeName)} 的照片" />`).join("")}</div>
@@ -566,6 +596,8 @@ function bindSheetEvents() {
       latitude: memory.latitude,
       longitude: memory.longitude,
       city: memory.city || "",
+      district: memory.district || "",
+      address: memory.address || "",
       existing: memory
     };
     state.searchedPlace = null;
@@ -598,7 +630,9 @@ async function saveMemory() {
       placeName: document.querySelector("#placeName").value,
       latitude: state.draft.latitude,
       longitude: state.draft.longitude,
-      city: document.querySelector("#city").value,
+      city: state.draft.city || "",
+      district: state.draft.district || "",
+      address: state.draft.address || "",
       memoryDate: document.querySelector("#memoryDate").value,
       rating: Number(document.querySelector("#rating").value),
       revisitStatus: document.querySelector("#revisit").value,

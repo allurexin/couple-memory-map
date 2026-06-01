@@ -346,6 +346,21 @@ button {
   grid-column: 2;
 }
 
+.location-summary {
+  display: grid;
+  gap: 4px;
+  margin: 12px 0;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #f8fbff;
+}
+
+.location-summary span {
+  color: #667085;
+  font-size: 13px;
+}
+
 .memory-list {
   display: grid;
   gap: 8px;

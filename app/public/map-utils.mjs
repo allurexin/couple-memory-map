@@ -31,6 +31,38 @@ export function normalizePlaceSearchResults(pois = [], fallbackQuery = "") {
     .filter((place) => place.placeName && Number.isFinite(place.latitude) && Number.isFinite(place.longitude));
 }
 
+function cityName(memory) {
+  return memory.city || memory.district || "";
+}
+
+function routeDate(memory) {
+  return `${memory.memoryDate || ""}${memory.createdAt || ""}`;
+}
+
+export function homeMapView(memories = []) {
+  if (!memories.length) return { city: "", memories: [], route: [] };
+
+  const counts = new Map();
+  memories.forEach((memory) => {
+    const city = cityName(memory);
+    if (!city) return;
+    counts.set(city, (counts.get(city) || 0) + 1);
+  });
+
+  let city = "";
+  let count = 0;
+  for (const [candidate, candidateCount] of counts) {
+    if (candidateCount > count) {
+      city = candidate;
+      count = candidateCount;
+    }
+  }
+
+  const homeMemories = city ? memories.filter((memory) => cityName(memory) === city) : memories;
+  const route = [...homeMemories].sort((a, b) => routeDate(a).localeCompare(routeDate(b)));
+  return { city, memories: homeMemories, route };
+}
+
 export function renderableMapPoints(memories = [], draft = null, searchedPlace = null) {
   const memoryPoints = memories.map((memory) => ({
     id: memory.id,

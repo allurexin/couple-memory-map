@@ -114,6 +114,8 @@ describe("couple memory map api", () => {
         latitude: 30.266,
         longitude: 120.161,
         city: "杭州",
+        district: "上城区",
+        address: "延安路98号",
         memoryDate: "2026-05-31",
         rating: 5,
         revisitStatus: "again",
@@ -126,6 +128,8 @@ describe("couple memory map api", () => {
     assert.equal(created.status, 201);
     assert.equal(created.body.memory.foodItems.length, 2);
     assert.equal(created.body.memory.photos.length, 1);
+    assert.equal(created.body.memory.district, "上城区");
+    assert.equal(created.body.memory.address, "延安路98号");
 
     const partnerList = await request(baseUrl, "/api/memories?keyword=冰粉&revisitStatus=again", {
       token: partner.token
