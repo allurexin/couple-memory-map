@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const __filename = fileURLToPath(import.meta.url);
 const publicDir = join(__dirname, "public");
+const defaultConfigPath = join(__dirname, "..", "config.local.json");
 
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
@@ -86,6 +87,22 @@ function createStore(dataDir) {
   }
 
   return { uploadDir, get state() { return publicState(); }, save };
+}
+
+function readJsonFile(path) {
+  if (!path || !existsSync(path)) return {};
+  return JSON.parse(readFileSync(path, "utf8"));
+}
+
+function publicConfig(configPath = defaultConfigPath) {
+  const fileConfig = readJsonFile(configPath);
+  const amapKey = String(process.env.AMAP_KEY || fileConfig.amapKey || "").trim();
+  const amapSecurityCode = String(process.env.AMAP_SECURITY_CODE || fileConfig.amapSecurityCode || "").trim();
+  return {
+    hasAmapConfig: Boolean(amapKey && amapSecurityCode),
+    amapKey,
+    amapSecurityCode
+  };
 }
 
 function json(res, status, body) {
@@ -226,7 +243,7 @@ function savePhotoDataUrl(store, memory, userId, photoDataUrl) {
   memory.photos.push({ id, thumbnailUrl: url, originalUrl: url, uploadedBy: userId, createdAt: nowIso() });
 }
 
-async function handleApi(req, res, store, jwtSecret) {
+async function handleApi(req, res, store, jwtSecret, configPath) {
   const url = new URL(req.url, "http://localhost");
   const { state } = store;
 
@@ -237,6 +254,11 @@ async function handleApi(req, res, store, jwtSecret) {
 
   if (req.method === "GET" && url.pathname === "/api/health") {
     json(res, 200, { ok: true });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/config") {
+    json(res, 200, publicConfig(configPath));
     return;
   }
 
@@ -475,12 +497,13 @@ function serveStatic(req, res, dataDir) {
 export function createAppServer(options = {}) {
   const dataDir = options.dataDir || process.env.DATA_DIR || join(__dirname, "..", "data");
   const jwtSecret = options.jwtSecret || process.env.JWT_SECRET || "local-development-secret";
+  const configPath = options.configPath || process.env.CONFIG_PATH || defaultConfigPath;
   const store = createStore(dataDir);
 
   return createServer(async (req, res) => {
     try {
       if (req.url?.startsWith("/api/")) {
-        await handleApi(req, res, store, jwtSecret);
+        await handleApi(req, res, store, jwtSecret, configPath);
         return;
       }
       serveStatic(req, res, dataDir);

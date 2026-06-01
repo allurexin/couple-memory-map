@@ -1,6 +1,6 @@
 import { after, before, describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAppServer } from "../app/server.mjs";
@@ -152,5 +152,33 @@ describe("couple memory map api", () => {
     });
 
     assert.equal(forbidden.status, 404);
+  });
+
+  it("exposes public map config from an ignored local config file", async () => {
+    const configPath = join(dataDir, "config.local.json");
+    await writeFile(configPath, JSON.stringify({
+      amapKey: "test-amap-key",
+      amapSecurityCode: "test-security-code"
+    }), "utf8");
+
+    const configuredServer = createAppServer({
+      dataDir: join(dataDir, "configured"),
+      jwtSecret: "test-secret",
+      configPath
+    });
+    await new Promise((resolve) => configuredServer.listen(0, "127.0.0.1", resolve));
+    const configuredBaseUrl = `http://127.0.0.1:${configuredServer.address().port}`;
+
+    try {
+      const result = await request(configuredBaseUrl, "/api/config");
+      assert.equal(result.status, 200);
+      assert.deepEqual(result.body, {
+        hasAmapConfig: true,
+        amapKey: "test-amap-key",
+        amapSecurityCode: "test-security-code"
+      });
+    } finally {
+      await new Promise((resolve) => configuredServer.close(resolve));
+    }
   });
 });

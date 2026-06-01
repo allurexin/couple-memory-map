@@ -3,3 +3,4 @@ data/
 app/data/
 *.log
 *.pid
+config.local.json

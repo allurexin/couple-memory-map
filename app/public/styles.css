@@ -172,6 +172,16 @@ button {
   transform: rotate(-8deg);
 }
 
+.amap-root {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.amap-root + .map-hint {
+  z-index: 2;
+}
+
 .map-hint {
   position: absolute;
   z-index: 2;

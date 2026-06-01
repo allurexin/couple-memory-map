@@ -9,8 +9,11 @@ const state = {
   selected: null,
   draft: null,
   filters: { keyword: "", revisitStatus: "all" },
+  config: { hasAmapConfig: false, amapKey: "", amapSecurityCode: "" },
   error: ""
 };
+
+let amapLoaderPromise = null;
 
 const statusText = {
   again: "想再去",
@@ -39,6 +42,113 @@ async function api(path, options = {}) {
   const body = text ? JSON.parse(text) : null;
   if (!response.ok) throw new Error(body?.message || "请求失败");
   return body;
+}
+
+async function loadConfig() {
+  try {
+    state.config = await api("/api/config");
+  } catch {
+    state.config = { hasAmapConfig: false, amapKey: "", amapSecurityCode: "" };
+  }
+}
+
+function loadScriptOnce(id, src) {
+  const existing = document.querySelector(`#${id}`);
+  if (existing) {
+    return new Promise((resolve, reject) => {
+      if (window.AMapLoader) resolve();
+      existing.addEventListener("load", resolve, { once: true });
+      existing.addEventListener("error", reject, { once: true });
+    });
+  }
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.id = id;
+    script.src = src;
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
+async function loadAmap() {
+  if (!state.config.hasAmapConfig) return null;
+  if (!amapLoaderPromise) {
+    window._AMapSecurityConfig = {
+      securityJsCode: state.config.amapSecurityCode
+    };
+    amapLoaderPromise = loadScriptOnce("amap-loader", "https://webapi.amap.com/loader.js")
+      .then(() => window.AMapLoader.load({
+        key: state.config.amapKey,
+        version: "2.0",
+        plugins: ["AMap.PlaceSearch", "AMap.Scale"]
+      }));
+  }
+  return amapLoaderPromise;
+}
+
+async function searchAmapPlace(placeName) {
+  const AMap = await loadAmap();
+  if (!AMap || !placeName.trim()) return null;
+  return new Promise((resolve) => {
+    const placeSearch = new AMap.PlaceSearch({ city: "全国", pageSize: 1 });
+    placeSearch.search(placeName.trim(), (status, result) => {
+      const poi = status === "complete" ? result?.poiList?.pois?.[0] : null;
+      if (!poi?.location) {
+        resolve(null);
+        return;
+      }
+      resolve({
+        placeName: poi.name || placeName,
+        latitude: Number(poi.location.lat),
+        longitude: Number(poi.location.lng),
+        city: poi.cityname || poi.adname || ""
+      });
+    });
+  });
+}
+
+async function mountAmapMap(memories) {
+  const root = document.querySelector("#amapRoot");
+  if (!root) return;
+  try {
+    const AMap = await loadAmap();
+    if (!AMap || !document.body.contains(root)) return;
+    const centerMemory = state.selected || state.draft || memories[0];
+    const center = centerMemory ? [Number(centerMemory.longitude), Number(centerMemory.latitude)] : [120.161, 30.266];
+    const map = new AMap.Map(root, {
+      zoom: centerMemory ? 14 : 11,
+      center,
+      viewMode: "2D"
+    });
+    map.addControl(new AMap.Scale());
+    memories.forEach((memory) => {
+      const marker = new AMap.Marker({
+        position: [Number(memory.longitude), Number(memory.latitude)],
+        title: memory.placeName
+      });
+      marker.on("click", () => {
+        state.draft = null;
+        state.selected = memory;
+        renderMap();
+      });
+      map.add(marker);
+    });
+    map.on("click", (event) => {
+      state.selected = null;
+      state.draft = {
+        placeName: document.querySelector("#searchPlace")?.value || "手动选择的位置",
+        latitude: Number(event.lnglat.lat.toFixed(6)),
+        longitude: Number(event.lnglat.lng.toFixed(6)),
+        city: ""
+      };
+      renderMap();
+    });
+  } catch (error) {
+    state.config.hasAmapConfig = false;
+    state.error = `高德地图加载失败：${error.message || "请检查 Key 和安全密钥"}`;
+    renderMap();
+  }
 }
 
 function setSession(auth) {
@@ -180,6 +290,7 @@ function markerPosition(memory) {
 
 function renderMap() {
   const filtered = filterMemories(state.memories, state.filters);
+  const useAmap = state.config.hasAmapConfig;
   app.innerHTML = `
     <main class="map-screen">
       <header class="map-header">
@@ -190,8 +301,8 @@ function renderMap() {
         <button id="logout">退出</button>
       </header>
       <section class="map-canvas" id="mapCanvas">
-        <div class="map-hint">点击地图任意位置添加记忆；配置高德 Key 后可接入真实地图搜索。</div>
-        ${state.memories
+        ${useAmap ? '<div class="amap-root" id="amapRoot"></div><div class="map-hint">正在使用高德地图。搜索店名或点击地图添加记忆。</div>' : '<div class="map-hint">点击地图任意位置添加记忆；配置高德 Key 后可接入真实地图搜索。</div>'}
+        ${useAmap ? "" : state.memories
           .map(
             (memory) => `
               <button class="pin ${memory.revisitStatus}" data-id="${memory.id}" style="${markerPosition(memory)}" title="${escapeHtml(memory.placeName)}">
@@ -206,20 +317,24 @@ function renderMap() {
   `;
 
   document.querySelector("#logout").addEventListener("click", logout);
-  document.querySelector("#mapCanvas").addEventListener("click", (event) => {
-    if (event.target.closest(".pin")) return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    const x = (event.clientX - rect.left) / rect.width;
-    const y = (event.clientY - rect.top) / rect.height;
-    state.selected = null;
-    state.draft = {
-      placeName: document.querySelector("#searchPlace")?.value || "手动选择的位置",
-      latitude: Number((18 + y * 28).toFixed(6)),
-      longitude: Number((98 + x * 34).toFixed(6)),
-      city: ""
-    };
-    renderMap();
-  });
+  if (useAmap) {
+    mountAmapMap(filtered);
+  } else {
+    document.querySelector("#mapCanvas").addEventListener("click", (event) => {
+      if (event.target.closest(".pin")) return;
+      const rect = event.currentTarget.getBoundingClientRect();
+      const x = (event.clientX - rect.left) / rect.width;
+      const y = (event.clientY - rect.top) / rect.height;
+      state.selected = null;
+      state.draft = {
+        placeName: document.querySelector("#searchPlace")?.value || "手动选择的位置",
+        latitude: Number((18 + y * 28).toFixed(6)),
+        longitude: Number((98 + x * 34).toFixed(6)),
+        city: ""
+      };
+      renderMap();
+    });
+  }
 
   document.querySelectorAll(".pin").forEach((pin) => {
     pin.addEventListener("click", () => {
@@ -306,10 +421,11 @@ function renderMemoryDetail(memory) {
 }
 
 function bindSheetEvents() {
-  document.querySelector("#useSearch")?.addEventListener("click", () => {
+  document.querySelector("#useSearch")?.addEventListener("click", async () => {
     const placeName = document.querySelector("#searchPlace").value || "手动选择的位置";
+    const amapPlace = state.config.hasAmapConfig ? await searchAmapPlace(placeName) : null;
     state.selected = null;
-    state.draft = { placeName, latitude: 30.266, longitude: 120.161, city: "" };
+    state.draft = amapPlace || { placeName, latitude: 30.266, longitude: 120.161, city: "" };
     renderMap();
   });
 
@@ -419,6 +535,8 @@ async function deleteSelected() {
 window.addEventListener("focus", () => {
   if (state.token && state.space) loadMemories().then(renderMap).catch(() => undefined);
 });
+
+await loadConfig();
 
 if (state.token) {
   loadSpace().catch(() => {
