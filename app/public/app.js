@@ -473,7 +473,7 @@ async function mountAmapMap(memories, route = [], hasActivePlace = false) {
       });
       marker.on("click", () => {
         if (point.kind === "searched") {
-          state.draft = state.searchedPlace;
+          state.draft = { ...state.searchedPlace };
           state.searchedPlace = null;
           state.error = "";
           renderMap();
@@ -885,7 +885,7 @@ function bindSheetEvents() {
   });
 
   document.querySelector("#addSearchedPlace")?.addEventListener("click", () => {
-    state.draft = state.searchedPlace;
+    state.draft = { ...state.searchedPlace };
     state.searchedPlace = null;
     state.searchResults = [];
     state.error = "";
@@ -975,8 +975,9 @@ async function saveMemory() {
       foodItems: document.querySelector("#foodItems").value.split(/[，,]/).map((item) => item.trim()).filter(Boolean),
       photoDataUrl
     };
-    const path = state.draft.id ? `/api/memories/${state.draft.id}` : "/api/memories";
-    const method = state.draft.id ? "PUT" : "POST";
+    const isEditing = Boolean(state.draft.existing?.id);
+    const path = isEditing ? `/api/memories/${state.draft.existing.id}` : "/api/memories";
+    const method = isEditing ? "PUT" : "POST";
     await api(path, { method, body });
     state.draft = null;
     await loadMemories();

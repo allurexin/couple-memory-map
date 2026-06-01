@@ -158,6 +158,38 @@ describe("couple memory map api", () => {
     assert.equal(forbidden.status, 404);
   });
 
+  it("creates a memory without uploading a photo", async () => {
+    const owner = await register(baseUrl, "no-photo-owner@example.com", "No Photo Owner");
+    const space = await request(baseUrl, "/api/spaces", {
+      method: "POST",
+      token: owner.token,
+      body: { name: "No Photo Space" }
+    });
+    assert.equal(space.status, 201);
+
+    const created = await request(baseUrl, "/api/memories", {
+      method: "POST",
+      token: owner.token,
+      body: {
+        placeName: "合肥小馆",
+        latitude: 31.86,
+        longitude: 117.28,
+        city: "合肥市",
+        district: "蜀山区",
+        address: "潜山路",
+        memoryDate: "2026-06-01",
+        rating: 5,
+        revisitStatus: "again",
+        notes: "",
+        foodItems: ["牛肉粉"]
+      }
+    });
+
+    assert.equal(created.status, 201);
+    assert.equal(created.body.memory.placeName, "合肥小馆");
+    assert.deepEqual(created.body.memory.photos, []);
+  });
+
   it("exposes public map config from an ignored local config file", async () => {
     const configPath = join(dataDir, "config.local.json");
     await writeFile(configPath, JSON.stringify({
