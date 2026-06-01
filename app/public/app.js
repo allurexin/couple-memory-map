@@ -9,12 +9,17 @@ const state = {
   memories: [],
   selected: null,
   draft: null,
+  searchedPlace: null,
+  searchQuery: "",
+  isSearchingPlace: false,
   filters: { keyword: "", revisitStatus: "all" },
   config: { hasAmapConfig: false, amapKey: "", amapSecurityCode: "" },
   error: ""
 };
 
 let amapLoaderPromise = null;
+let placeSearchTimer = null;
+let placeSearchRequest = 0;
 
 const statusText = {
   again: "想再去",
@@ -112,7 +117,7 @@ async function searchAmapPlace(placeName) {
 }
 
 function createAmapMarkerContent(point) {
-  if (point.kind === "draft") {
+  if (point.kind === "draft" || point.kind === "searched") {
     return `<div class="amap-draft-marker" title="${escapeHtml(point.title)}"><span>定位</span></div>`;
   }
   return `<div class="amap-memory-marker ${point.revisitStatus}" title="${escapeHtml(point.title)}"><span>${point.rating}</span></div>`;
@@ -124,9 +129,9 @@ async function mountAmapMap(memories) {
   try {
     const AMap = await loadAmap();
     if (!AMap || !document.body.contains(root)) return;
-    const centerMemory = state.selected || state.draft || memories[0];
+    const centerMemory = state.selected || state.draft || state.searchedPlace || memories[0];
     const center = centerMemory ? [Number(centerMemory.longitude), Number(centerMemory.latitude)] : [120.161, 30.266];
-    const points = renderableMapPoints(memories, state.draft);
+    const points = renderableMapPoints(memories, state.draft, state.searchedPlace);
     const map = new AMap.Map(root, {
       zoom: centerMemory ? 14 : 11,
       center,
@@ -141,6 +146,13 @@ async function mountAmapMap(memories) {
         offset: new AMap.Pixel(-16, -34)
       });
       marker.on("click", () => {
+        if (point.kind === "searched") {
+          state.draft = state.searchedPlace;
+          state.searchedPlace = null;
+          state.error = "";
+          renderMap();
+          return;
+        }
         if (point.kind === "draft") return;
         state.draft = null;
         state.selected = point.memory;
@@ -151,6 +163,7 @@ async function mountAmapMap(memories) {
     if (points.length > 1 && !state.draft) map.setFitView();
     map.on("click", (event) => {
       state.selected = null;
+      state.searchedPlace = null;
       state.draft = {
         placeName: document.querySelector("#searchPlace")?.value || "手动选择的位置",
         latitude: Number(event.lnglat.lat.toFixed(6)),
@@ -164,6 +177,53 @@ async function mountAmapMap(memories) {
     state.error = `高德地图加载失败：${error.message || "请检查 Key 和安全密钥"}`;
     renderMap();
   }
+}
+
+async function locatePlaceFromSearch(query, options = {}) {
+  const placeName = query.trim();
+  if (!placeName) {
+    state.searchQuery = "";
+    state.searchedPlace = null;
+    state.isSearchingPlace = false;
+    renderMap();
+    return;
+  }
+
+  const requestId = ++placeSearchRequest;
+  state.searchQuery = placeName;
+  state.isSearchingPlace = true;
+  if (options.renderLoading) renderMap();
+
+  const amapPlace = state.config.hasAmapConfig ? await searchAmapPlace(placeName) : null;
+  if (requestId !== placeSearchRequest) return;
+
+  state.isSearchingPlace = false;
+  if (state.config.hasAmapConfig && !amapPlace) {
+    state.searchedPlace = null;
+    state.error = "没有搜到这个店铺，换一个更完整的店名或加上城市试试。";
+    renderMap();
+    return;
+  }
+
+  state.selected = null;
+  state.error = "";
+  state.searchedPlace = amapPlace || { placeName, latitude: 30.266, longitude: 120.161, city: "" };
+  renderMap();
+}
+
+function schedulePlaceSearch(query) {
+  state.searchQuery = query;
+  window.clearTimeout(placeSearchTimer);
+  if (!state.config.hasAmapConfig) return;
+  if (query.trim().length < 2) {
+    state.searchedPlace = null;
+    state.error = "";
+    renderMap();
+    return;
+  }
+  placeSearchTimer = window.setTimeout(() => {
+    locatePlaceFromSearch(query, { renderLoading: true });
+  }, 650);
 }
 
 function setSession(auth) {
@@ -368,9 +428,16 @@ function renderSheet(filtered) {
 
   return `
     <div class="search-row">
-      <input id="searchPlace" aria-label="搜索店名或地点" placeholder="输入店名，点地图放点" />
+      <input id="searchPlace" aria-label="搜索店名或地点" value="${escapeHtml(state.searchQuery)}" placeholder="输入店名，地图自动定位" />
       <button class="primary" id="useSearch">${state.config.hasAmapConfig ? "搜索定位" : "放点"}</button>
     </div>
+    ${
+      state.isSearchingPlace
+        ? '<p class="muted">正在搜索店铺位置...</p>'
+        : state.searchedPlace
+          ? `<section class="search-result"><strong>${escapeHtml(state.searchedPlace.placeName)}</strong><span>${escapeHtml(state.searchedPlace.city || "已定位到地图")}</span><button class="primary" id="addSearchedPlace">添加这家店的记忆</button></section>`
+          : ""
+    }
     <div class="sheet-controls">
       <input id="keyword" aria-label="搜索菜品或店名" value="${escapeHtml(state.filters.keyword)}" placeholder="筛选菜品或店名" />
       <select id="revisitStatus">
@@ -438,15 +505,17 @@ function renderMemoryDetail(memory) {
 function bindSheetEvents() {
   document.querySelector("#useSearch")?.addEventListener("click", async () => {
     const placeName = document.querySelector("#searchPlace").value || "手动选择的位置";
-    const amapPlace = state.config.hasAmapConfig ? await searchAmapPlace(placeName) : null;
-    if (state.config.hasAmapConfig && !amapPlace) {
-      state.error = "没有搜到这个店铺，换一个更完整的店名或加上城市试试。";
-      renderMap();
-      return;
-    }
-    state.selected = null;
+    await locatePlaceFromSearch(placeName, { renderLoading: true });
+  });
+
+  document.querySelector("#searchPlace")?.addEventListener("input", (event) => {
+    schedulePlaceSearch(event.target.value);
+  });
+
+  document.querySelector("#addSearchedPlace")?.addEventListener("click", () => {
+    state.draft = state.searchedPlace;
+    state.searchedPlace = null;
     state.error = "";
-    state.draft = amapPlace || { placeName, latitude: 30.266, longitude: 120.161, city: "" };
     renderMap();
   });
 
@@ -470,6 +539,7 @@ function bindSheetEvents() {
 
   document.querySelector("#cancelDraft")?.addEventListener("click", () => {
     state.draft = null;
+    state.searchedPlace = null;
     state.error = "";
     renderMap();
   });
@@ -490,6 +560,7 @@ function bindSheetEvents() {
       city: memory.city || "",
       existing: memory
     };
+    state.searchedPlace = null;
     state.selected = null;
     renderMap();
     document.querySelector("#foodItems").value = memory.foodItems.join(", ");

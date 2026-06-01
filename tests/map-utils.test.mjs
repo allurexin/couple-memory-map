@@ -31,4 +31,16 @@ describe("renderableMapPoints", () => {
       memory: null
     });
   });
+
+  it("can show a live searched shop before opening the add-memory form", () => {
+    const points = renderableMapPoints([], null, {
+      placeName: "外婆家(杭州西湖银泰店)",
+      latitude: 30.255,
+      longitude: 120.165
+    });
+
+    assert.equal(points.length, 1);
+    assert.equal(points[0].kind, "searched");
+    assert.equal(points[0].title, "外婆家(杭州西湖银泰店)");
+  });
 });

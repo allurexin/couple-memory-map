@@ -1,4 +1,17 @@
-export function renderableMapPoints(memories = [], draft = null) {
+function mapPointFromPlace(place, kind) {
+  return {
+    id: place.id || kind,
+    kind,
+    title: place.placeName,
+    latitude: Number(place.latitude),
+    longitude: Number(place.longitude),
+    rating: null,
+    revisitStatus: kind,
+    memory: null
+  };
+}
+
+export function renderableMapPoints(memories = [], draft = null, searchedPlace = null) {
   const memoryPoints = memories.map((memory) => ({
     id: memory.id,
     kind: "memory",
@@ -10,19 +23,9 @@ export function renderableMapPoints(memories = [], draft = null) {
     memory
   }));
 
-  if (!draft) return memoryPoints;
+  if (draft) return [...memoryPoints, mapPointFromPlace(draft, "draft")];
 
-  return [
-    ...memoryPoints,
-    {
-      id: draft.id || "draft",
-      kind: "draft",
-      title: draft.placeName,
-      latitude: Number(draft.latitude),
-      longitude: Number(draft.longitude),
-      rating: null,
-      revisitStatus: "draft",
-      memory: null
-    }
-  ];
+  if (searchedPlace) return [...memoryPoints, mapPointFromPlace(searchedPlace, "searched")];
+
+  return memoryPoints;
 }

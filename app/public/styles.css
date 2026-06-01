@@ -296,6 +296,28 @@ button {
   margin: 10px 0;
 }
 
+.search-result {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 10px;
+  align-items: center;
+  margin: 10px 0;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8fbff;
+}
+
+.search-result span {
+  color: #667085;
+  font-size: 13px;
+}
+
+.search-result button {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+}
+
 .memory-list {
   display: grid;
   gap: 8px;
