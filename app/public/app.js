@@ -1,4 +1,5 @@
 import { filterMemories } from "./filter.mjs";
+import { renderableMapPoints } from "./map-utils.mjs";
 
 const app = document.querySelector("#app");
 const state = {
@@ -98,14 +99,23 @@ async function searchAmapPlace(placeName) {
         resolve(null);
         return;
       }
+      const city = Array.isArray(poi.cityname) ? poi.cityname[0] : poi.cityname;
+      const district = Array.isArray(poi.adname) ? poi.adname[0] : poi.adname;
       resolve({
         placeName: poi.name || placeName,
         latitude: Number(poi.location.lat),
         longitude: Number(poi.location.lng),
-        city: poi.cityname || poi.adname || ""
+        city: city || district || ""
       });
     });
   });
+}
+
+function createAmapMarkerContent(point) {
+  if (point.kind === "draft") {
+    return `<div class="amap-draft-marker" title="${escapeHtml(point.title)}"><span>定位</span></div>`;
+  }
+  return `<div class="amap-memory-marker ${point.revisitStatus}" title="${escapeHtml(point.title)}"><span>${point.rating}</span></div>`;
 }
 
 async function mountAmapMap(memories) {
@@ -116,24 +126,29 @@ async function mountAmapMap(memories) {
     if (!AMap || !document.body.contains(root)) return;
     const centerMemory = state.selected || state.draft || memories[0];
     const center = centerMemory ? [Number(centerMemory.longitude), Number(centerMemory.latitude)] : [120.161, 30.266];
+    const points = renderableMapPoints(memories, state.draft);
     const map = new AMap.Map(root, {
       zoom: centerMemory ? 14 : 11,
       center,
       viewMode: "2D"
     });
     map.addControl(new AMap.Scale());
-    memories.forEach((memory) => {
+    points.forEach((point) => {
       const marker = new AMap.Marker({
-        position: [Number(memory.longitude), Number(memory.latitude)],
-        title: memory.placeName
+        position: [point.longitude, point.latitude],
+        title: point.title,
+        content: createAmapMarkerContent(point),
+        offset: new AMap.Pixel(-16, -34)
       });
       marker.on("click", () => {
+        if (point.kind === "draft") return;
         state.draft = null;
-        state.selected = memory;
+        state.selected = point.memory;
         renderMap();
       });
       map.add(marker);
     });
+    if (points.length > 1 && !state.draft) map.setFitView();
     map.on("click", (event) => {
       state.selected = null;
       state.draft = {
@@ -354,7 +369,7 @@ function renderSheet(filtered) {
   return `
     <div class="search-row">
       <input id="searchPlace" aria-label="搜索店名或地点" placeholder="输入店名，点地图放点" />
-      <button class="primary" id="useSearch">放点</button>
+      <button class="primary" id="useSearch">${state.config.hasAmapConfig ? "搜索定位" : "放点"}</button>
     </div>
     <div class="sheet-controls">
       <input id="keyword" aria-label="搜索菜品或店名" value="${escapeHtml(state.filters.keyword)}" placeholder="筛选菜品或店名" />
@@ -424,7 +439,13 @@ function bindSheetEvents() {
   document.querySelector("#useSearch")?.addEventListener("click", async () => {
     const placeName = document.querySelector("#searchPlace").value || "手动选择的位置";
     const amapPlace = state.config.hasAmapConfig ? await searchAmapPlace(placeName) : null;
+    if (state.config.hasAmapConfig && !amapPlace) {
+      state.error = "没有搜到这个店铺，换一个更完整的店名或加上城市试试。";
+      renderMap();
+      return;
+    }
     state.selected = null;
+    state.error = "";
     state.draft = amapPlace || { placeName, latitude: 30.266, longitude: 120.161, city: "" };
     renderMap();
   });

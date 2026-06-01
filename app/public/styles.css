@@ -182,6 +182,48 @@ button {
   z-index: 2;
 }
 
+.amap-memory-marker,
+.amap-draft-marker {
+  min-width: 32px;
+  height: 32px;
+  border: 3px solid #fff;
+  border-radius: 16px 16px 16px 2px;
+  color: #fff;
+  box-shadow: 0 9px 20px rgba(24, 34, 48, 0.22);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  transform: rotate(-45deg);
+}
+
+.amap-memory-marker {
+  width: 32px;
+}
+
+.amap-memory-marker span {
+  transform: rotate(45deg);
+}
+
+.amap-memory-marker.again {
+  background: #0f9f6e;
+}
+
+.amap-memory-marker.normal {
+  background: #f59e0b;
+}
+
+.amap-memory-marker.avoid {
+  background: #e11d48;
+}
+
+.amap-draft-marker {
+  width: 46px;
+  padding: 0 8px;
+  background: #1769e0;
+  transform: translateY(-2px);
+}
+
 .map-hint {
   position: absolute;
   z-index: 2;
