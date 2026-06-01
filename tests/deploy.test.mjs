@@ -17,6 +17,15 @@ describe("production deployment", () => {
     assert.match(dockerfile, /CMD \["npm", "start"\]/);
   });
 
+  it("defines a Render blueprint with HTTPS-ready persistent storage", async () => {
+    const blueprint = await readFile("render.yaml", "utf8");
+    assert.match(blueprint, /type: web/);
+    assert.match(blueprint, /runtime: docker/);
+    assert.match(blueprint, /healthCheckPath: \/api\/health/);
+    assert.match(blueprint, /mountPath: \/data/);
+    assert.match(blueprint, /JWT_SECRET[\s\S]*generateValue: true/);
+  });
+
   it("server supports external host binding in production", async () => {
     const server = await readFile("app/server.mjs", "utf8");
     assert.match(server, /process\.env\.HOST/);

@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: couple-memory-map
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    disk:
+      name: couple-memory-map-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 5173
+      - key: DATA_DIR
+        value: /data
+      - key: JWT_SECRET
+        generateValue: true
+      - key: AMAP_KEY
+        sync: false
+      - key: AMAP_SECURITY_CODE
+        sync: false
