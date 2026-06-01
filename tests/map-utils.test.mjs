@@ -113,8 +113,8 @@ describe("homeMapView", () => {
 describe("mapPresentation", () => {
   it("uses simplified boundary-like map features on the home map and detailed features while choosing a shop", () => {
     assert.deepEqual(mapPresentation(false), {
-      mapStyle: "amap://styles/whitesmoke",
-      features: ["bg"]
+      mapStyle: "amap://styles/normal",
+      features: ["bg", "road"]
     });
     assert.deepEqual(mapPresentation(true), {
       mapStyle: "amap://styles/normal",

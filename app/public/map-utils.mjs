@@ -72,8 +72,8 @@ export function mapPresentation(hasActivePlace = false) {
   }
 
   return {
-    mapStyle: "amap://styles/whitesmoke",
-    features: ["bg"]
+    mapStyle: "amap://styles/normal",
+    features: ["bg", "road"]
   };
 }
 

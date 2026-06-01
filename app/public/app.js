@@ -92,7 +92,7 @@ async function loadAmap() {
       .then(() => window.AMapLoader.load({
         key: state.config.amapKey,
         version: "2.0",
-        plugins: ["AMap.PlaceSearch", "AMap.Scale"]
+        plugins: ["AMap.PlaceSearch", "AMap.Scale", "AMap.DistrictLayer"]
       }));
   }
   return amapLoaderPromise;
@@ -121,6 +121,24 @@ function placeLabel(place) {
   return [place.city, place.district, place.address].filter(Boolean).join(" · ");
 }
 
+function addDistrictBoundaryLayer(AMap, map, memories) {
+  if (!AMap.DistrictLayer || !memories.length) return;
+  if (!memories.some((memory) => Number.isFinite(Number(memory.longitude)) && Number.isFinite(Number(memory.latitude)))) return;
+
+  const layer = new AMap.DistrictLayer.Country({
+    zIndex: 2,
+    SOC: "CHN",
+    depth: 2,
+    styles: {
+      fill: "rgba(255, 255, 255, 0.06)",
+      "nation-stroke": "rgba(23, 105, 224, 0.58)",
+      "province-stroke": "rgba(23, 105, 224, 0.42)",
+      "city-stroke": "rgba(23, 105, 224, 0.5)"
+    }
+  });
+  map.add(layer);
+}
+
 async function mountAmapMap(memories, route = [], hasActivePlace = false) {
   const root = document.querySelector("#amapRoot");
   if (!root) return;
@@ -141,6 +159,7 @@ async function mountAmapMap(memories, route = [], hasActivePlace = false) {
     });
     map.setFeatures(presentation.features);
     map.addControl(new AMap.Scale());
+    if (!hasActivePlace) addDistrictBoundaryLayer(AMap, map, memories);
     const markers = [];
     points.forEach((point) => {
       const marker = new AMap.Marker({
