@@ -5,9 +5,11 @@ import {
   mapPresentation,
   normalizePlaceSearchResults,
   outlineMapTarget,
+  outlinePinPhoto,
   provinceStats,
   provinceNameFromAdcode,
-  renderableMapPoints
+  renderableMapPoints,
+  sortDrillCardsByVisits
 } from "../app/public/map-utils.mjs";
 
 describe("renderableMapPoints", () => {
@@ -159,5 +161,26 @@ describe("outline map hierarchy", () => {
       latestCity: "安徽合肥",
       latestPlace: "小馆子"
     });
+  });
+
+  it("orders drilldown cards by visit count before name", () => {
+    const cards = sortDrillCardsByVisits([
+      { name: "B", count: 1 },
+      { name: "A", count: 3 },
+      { name: "C", count: 3 },
+      { name: "D", count: 0 }
+    ]);
+
+    assert.deepEqual(cards.map((card) => card.name), ["A", "C", "B", "D"]);
+  });
+
+  it("uses the first uploaded photo as the outline map pin image", () => {
+    assert.equal(outlinePinPhoto({ photos: [] }), "");
+    assert.equal(outlinePinPhoto({
+      photos: [
+        { thumbnailUrl: "/uploads/thumb-1.jpg", url: "/uploads/photo-1.jpg" },
+        { thumbnailUrl: "/uploads/thumb-2.jpg" }
+      ]
+    }), "/uploads/thumb-1.jpg");
   });
 });

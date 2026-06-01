@@ -4,9 +4,11 @@ import {
   mapPresentation,
   normalizePlaceSearchResults,
   outlineMapTarget,
+  outlinePinPhoto,
   provinceStats,
   provinceNameFromAdcode,
-  renderableMapPoints
+  renderableMapPoints,
+  sortDrillCardsByVisits
 } from "./map-utils.mjs";
 
 const app = document.querySelector("#app");
@@ -210,9 +212,12 @@ function renderOutlineSvg(boundary, memories, route, target) {
 
   const markerHtml = memories.map((memory, index) => {
     const point = memoryPoint(memory, project);
+    const photoUrl = outlinePinPhoto(memory);
     return `
       <button class="outline-point-wrap" data-id="${escapeHtml(memory.id)}" style="left:${point.x / 10}%;top:${point.y / 7}%">
-        <span class="outline-point ${memory.revisitStatus}">${escapeHtml(memory.rating)}</span>
+        <span class="outline-point ${memory.revisitStatus} ${photoUrl ? "with-photo" : ""}">
+          ${photoUrl ? `<img src="${escapeHtml(photoUrl)}" alt="" />` : escapeHtml(memory.rating)}
+        </span>
         <i>${index + 1}</i>
         <small>${escapeHtml(memory.placeName)}</small>
       </button>
@@ -311,16 +316,16 @@ function provinceInfoCards(memories, boundary, target) {
     const cards = children.map((child) => {
       const stat = statsByProvince.get(child.name);
       return { name: child.name, adcode: child.adcode, count: stat?.count || 0, latest: stat?.latestPlace || stat?.latestCity || "还没有足迹" };
-    }).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-    return renderOutlineCards(cards, "province");
+    });
+    return renderOutlineCards(sortDrillCardsByVisits(cards), "province");
   }
 
   if (target.level === "province") {
     const cards = children.map((child) => {
       const cityMemories = memories.filter((memory) => (memory.city || "").includes(child.name.replace(/市|地区|自治州/g, "")));
       return { name: child.name, adcode: child.adcode, count: cityMemories.length, latest: cityMemories[0]?.placeName || "点击查看城市轮廓" };
-    }).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-    return renderOutlineCards(cards, "city");
+    });
+    return renderOutlineCards(sortDrillCardsByVisits(cards), "city");
   }
 
   return "";

@@ -128,6 +128,15 @@ export function provinceStats(memories = []) {
     .sort((a, b) => b.count - a.count || a.province.localeCompare(b.province));
 }
 
+export function sortDrillCardsByVisits(cards = []) {
+  return [...cards].sort((a, b) => (b.count || 0) - (a.count || 0) || String(a.name || "").localeCompare(String(b.name || "")));
+}
+
+export function outlinePinPhoto(memory = {}) {
+  const firstPhoto = Array.isArray(memory.photos) ? memory.photos[0] : null;
+  return firstPhoto?.thumbnailUrl || firstPhoto?.url || "";
+}
+
 export function outlineMapTarget(homeView, level = "city", context = {}) {
   if (level === "country") {
     return { label: "中国", level: "country", searchName: "中国" };
