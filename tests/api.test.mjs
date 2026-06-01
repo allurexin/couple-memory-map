@@ -21,6 +21,15 @@ async function request(baseUrl, path, options = {}) {
   return { status: response.status, body };
 }
 
+async function textRequest(baseUrl, path) {
+  const response = await fetch(`${baseUrl}${path}`);
+  return {
+    status: response.status,
+    contentType: response.headers.get("content-type") || "",
+    text: await response.text()
+  };
+}
+
 async function register(baseUrl, email, displayName) {
   const result = await request(baseUrl, "/api/auth/register", {
     method: "POST",
@@ -216,5 +225,28 @@ describe("couple memory map api", () => {
     } finally {
       await new Promise((resolve) => configuredServer.close(resolve));
     }
+  });
+
+  it("serves installable PWA assets", async () => {
+    const index = await textRequest(baseUrl, "/");
+    assert.equal(index.status, 200);
+    assert.match(index.text, /rel="manifest"/);
+    assert.match(index.text, /serviceWorker/);
+
+    const manifest = await textRequest(baseUrl, "/manifest.webmanifest");
+    assert.equal(manifest.status, 200);
+    assert.match(manifest.contentType, /application\/manifest\+json|application\/json/);
+    const manifestBody = JSON.parse(manifest.text);
+    assert.equal(manifestBody.display, "standalone");
+    assert.equal(manifestBody.start_url, "/");
+    assert.ok(manifestBody.icons.length >= 1);
+
+    const serviceWorker = await textRequest(baseUrl, "/service-worker.js");
+    assert.equal(serviceWorker.status, 200);
+    assert.match(serviceWorker.text, /memory-map-static/);
+
+    const icon = await textRequest(baseUrl, "/icons/app-icon.svg");
+    assert.equal(icon.status, 200);
+    assert.match(icon.contentType, /image\/svg\+xml/);
   });
 });

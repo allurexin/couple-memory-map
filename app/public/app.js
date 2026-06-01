@@ -20,6 +20,8 @@ const state = {
   selected: null,
   draft: null,
   searchedPlace: null,
+  installPrompt: null,
+  appInstalled: window.matchMedia?.("(display-mode: standalone)")?.matches || navigator.standalone === true,
   searchResults: [],
   searchQuery: "",
   isSearchingPlace: false,
@@ -721,6 +723,20 @@ function markerPosition(memory) {
   return `left:${left}%;top:${top}%`;
 }
 
+function renderInstallAction() {
+  if (state.appInstalled || !state.installPrompt) return "";
+  return '<button class="install-app" id="installApp">安装App</button>';
+}
+
+async function installApp() {
+  if (!state.installPrompt) return;
+  const promptEvent = state.installPrompt;
+  state.installPrompt = null;
+  promptEvent.prompt();
+  await promptEvent.userChoice.catch(() => undefined);
+  render();
+}
+
 function renderMap() {
   const filtered = filterMemories(state.memories, state.filters);
   const useAmap = state.config.hasAmapConfig;
@@ -736,7 +752,10 @@ function renderMap() {
           <strong>${escapeHtml(state.space.name)}</strong>
           <span>绑定码 ${escapeHtml(state.space.bindingCode)} · ${escapeHtml(state.user.displayName)}</span>
         </div>
-        <button id="logout">退出</button>
+        <div class="header-actions">
+          ${renderInstallAction()}
+          <button id="logout">退出</button>
+        </div>
       </header>
       <section class="map-canvas" id="mapCanvas">
         ${showOutlineHome ? '<div class="outline-map" id="outlineMap"></div>' : ""}
@@ -757,6 +776,7 @@ function renderMap() {
   `;
 
   document.querySelector("#logout").addEventListener("click", logout);
+  document.querySelector("#installApp")?.addEventListener("click", installApp);
   if (showOutlineHome) {
     mountOutlineMap(filtered, homeView);
   } else if (useAmap) {
@@ -1022,6 +1042,18 @@ async function deleteSelected() {
 
 window.addEventListener("focus", () => {
   if (state.token && state.space) loadMemories().then(renderMap).catch(() => undefined);
+});
+
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  state.installPrompt = event;
+  if (state.user && state.space) renderMap();
+});
+
+window.addEventListener("appinstalled", () => {
+  state.appInstalled = true;
+  state.installPrompt = null;
+  render();
 });
 
 await loadConfig();

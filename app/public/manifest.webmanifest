@@ -1,0 +1,28 @@
+{
+  "name": "情侣美食记忆地图",
+  "short_name": "美食记忆",
+  "description": "把两个人一起吃过的店、菜和回忆保存到地图里。",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f4f6f8",
+  "theme_color": "#1769e0",
+  "categories": ["food", "lifestyle", "travel"],
+  "icons": [
+    {
+      "src": "/icons/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "记录新记忆",
+      "short_name": "记录",
+      "description": "打开美食记忆地图，搜索店铺后记录新的回忆。",
+      "url": "/"
+    }
+  ]
+}

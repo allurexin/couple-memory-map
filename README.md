@@ -32,6 +32,20 @@ http://127.0.0.1:5173
 .\test-app.cmd
 ```
 
+## 安装成 App
+
+当前应用已经支持 PWA 安装。启动本地服务后，用 Chrome、Edge 或手机浏览器打开：
+
+```text
+http://127.0.0.1:5173
+```
+
+- 电脑端：浏览器地址栏出现安装图标时点击安装，也可以在浏览器菜单里选择“安装此应用”。
+- Android：用 Chrome 打开后选择“添加到主屏幕”或“安装应用”。
+- iPhone：用 Safari 打开后点击分享按钮，再选择“添加到主屏幕”。
+
+安装后会以独立窗口打开，图标和启动信息来自 `app/public/manifest.webmanifest`，基础静态资源由 `app/public/service-worker.js` 缓存。
+
 ## 配置高德地图
 
 复制 `config.example.json` 为 `config.local.json`，填入高德 Web JS API 的 Key 和安全密钥：

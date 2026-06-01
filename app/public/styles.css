@@ -145,10 +145,24 @@ button {
   font-size: 12px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .map-header button {
   border: 0;
   background: transparent;
   color: #1769e0;
+}
+
+.map-header .install-app {
+  border-radius: 999px;
+  padding: 8px 11px;
+  color: #fff;
+  background: #1769e0;
+  box-shadow: 0 8px 18px rgba(23, 105, 224, 0.18);
 }
 
 .map-canvas {
