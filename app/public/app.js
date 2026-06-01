@@ -328,11 +328,24 @@ function provinceInfoCards(memories, boundary, target) {
 
 function renderOutlineCards(cards, nextLevel) {
   if (!cards.length) return "";
+  const featured = cards.find((card) => card.count) || cards[0];
+  const rest = cards.filter((card) => card !== featured).slice(0, 10);
+  const visitedRegions = cards.filter((card) => card.count).length;
   return `
     <div class="outline-drill-panel">
-      <strong>${nextLevel === "province" ? "省份足迹" : "城市下钻"}</strong>
-      <div>
-        ${cards.slice(0, 12).map((card) => `
+      <div class="outline-panel-head">
+        <div>
+          <strong>${nextLevel === "province" ? "省份足迹" : "城市下钻"}</strong>
+          <span>${visitedRegions} 个区域已有记录</span>
+        </div>
+      </div>
+      <button class="outline-feature-card ${featured.count ? "has-visits" : ""}" data-drill-level="${nextLevel}" data-drill-name="${escapeHtml(featured.name)}" data-drill-adcode="${escapeHtml(featured.adcode || "")}">
+        <span>${escapeHtml(featured.name)}</span>
+        <strong>${featured.count ? `${featured.count} 次` : "探索"}</strong>
+        <small>${escapeHtml(featured.latest)}</small>
+      </button>
+      <div class="outline-card-grid">
+        ${rest.map((card) => `
           <button class="${card.count ? "has-visits" : ""}" data-drill-level="${nextLevel}" data-drill-name="${escapeHtml(card.name)}" data-drill-adcode="${escapeHtml(card.adcode || "")}">
             <span>${escapeHtml(card.name)}</span>
             <small>${card.count ? `${card.count} 次 · ${escapeHtml(card.latest)}` : escapeHtml(card.latest)}</small>
