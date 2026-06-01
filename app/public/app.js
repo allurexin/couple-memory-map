@@ -12,6 +12,7 @@ import {
 } from "./map-utils.mjs";
 
 const app = document.querySelector("#app");
+const APK_DOWNLOAD_URL = "/downloads/couple-memory-map-debug.apk";
 const state = {
   token: localStorage.getItem("memory-map-token"),
   user: JSON.parse(localStorage.getItem("memory-map-user") || "null"),
@@ -628,6 +629,7 @@ function renderAuth(mode) {
         <div class="actions">
           <button class="primary" id="submitAuth">${mode === "register" ? "注册" : "登录"}</button>
           <button class="secondary" id="switchAuth">${mode === "register" ? "已有账号，去登录" : "没有账号，去注册"}</button>
+          ${renderApkDownloadLink("secondary apk-download")}
         </div>
       </section>
     </main>
@@ -728,6 +730,10 @@ function renderInstallAction() {
   return '<button class="install-app" id="installApp">安装App</button>';
 }
 
+function renderApkDownloadLink(className = "apk-download") {
+  return `<a class="${className}" href="${APK_DOWNLOAD_URL}" download="couple-memory-map-debug.apk">下载 Android 安装包</a>`;
+}
+
 async function installApp() {
   if (!state.installPrompt) return;
   const promptEvent = state.installPrompt;
@@ -753,6 +759,7 @@ function renderMap() {
           <span>绑定码 ${escapeHtml(state.space.bindingCode)} · ${escapeHtml(state.user.displayName)}</span>
         </div>
         <div class="header-actions">
+          ${renderApkDownloadLink()}
           ${renderInstallAction()}
           <button id="logout">退出</button>
         </div>

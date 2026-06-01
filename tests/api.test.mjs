@@ -30,6 +30,15 @@ async function textRequest(baseUrl, path) {
   };
 }
 
+async function binaryRequest(baseUrl, path) {
+  const response = await fetch(`${baseUrl}${path}`);
+  return {
+    status: response.status,
+    contentType: response.headers.get("content-type") || "",
+    byteLength: (await response.arrayBuffer()).byteLength
+  };
+}
+
 async function register(baseUrl, email, displayName) {
   const result = await request(baseUrl, "/api/auth/register", {
     method: "POST",
@@ -248,5 +257,10 @@ describe("couple memory map api", () => {
     const icon = await textRequest(baseUrl, "/icons/app-icon.svg");
     assert.equal(icon.status, 200);
     assert.match(icon.contentType, /image\/svg\+xml/);
+
+    const apk = await binaryRequest(baseUrl, "/downloads/couple-memory-map-debug.apk");
+    assert.equal(apk.status, 200);
+    assert.match(apk.contentType, /application\/vnd\.android\.package-archive|application\/octet-stream/);
+    assert.ok(apk.byteLength > 10_000);
   });
 });
