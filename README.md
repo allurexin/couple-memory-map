@@ -46,6 +46,8 @@ http://127.0.0.1:5173
 
 安装后会以独立窗口打开，图标和启动信息来自 `app/public/manifest.webmanifest`，基础静态资源由 `app/public/service-worker.js` 缓存。
 
+如果要在手机上真正安装，请先部署到 HTTPS 地址。详见 [手机安装版发布说明](docs/INSTALL_MOBILE_APP.md)。
+
 ## 配置高德地图
 
 复制 `config.example.json` 为 `config.local.json`，填入高德 Web JS API 的 Key 和安全密钥：

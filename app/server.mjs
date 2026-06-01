@@ -521,8 +521,9 @@ export function createAppServer(options = {}) {
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(__filename)) {
   const port = Number(process.env.PORT || 5173);
+  const host = process.env.HOST || "127.0.0.1";
   const server = createAppServer();
-  server.listen(port, "127.0.0.1", () => {
-    console.log(`情侣美食记忆地图已启动：http://127.0.0.1:${port}`);
+  server.listen(port, host, () => {
+    console.log(`情侣美食记忆地图已启动：http://${host}:${port}`);
   });
 }
