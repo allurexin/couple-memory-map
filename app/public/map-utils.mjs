@@ -11,6 +11,26 @@ function mapPointFromPlace(place, kind) {
   };
 }
 
+function firstText(value) {
+  if (Array.isArray(value)) return String(value[0] || "");
+  return String(value || "");
+}
+
+export function normalizePlaceSearchResults(pois = [], fallbackQuery = "") {
+  return pois
+    .filter((poi) => poi?.location)
+    .map((poi, index) => ({
+      id: poi.id || `place_${index}`,
+      placeName: firstText(poi.name) || fallbackQuery,
+      address: firstText(poi.address),
+      city: firstText(poi.cityname),
+      district: firstText(poi.adname),
+      latitude: Number(poi.location.lat),
+      longitude: Number(poi.location.lng)
+    }))
+    .filter((place) => place.placeName && Number.isFinite(place.latitude) && Number.isFinite(place.longitude));
+}
+
 export function renderableMapPoints(memories = [], draft = null, searchedPlace = null) {
   const memoryPoints = memories.map((memory) => ({
     id: memory.id,

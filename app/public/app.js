@@ -1,5 +1,5 @@
 import { filterMemories } from "./filter.mjs";
-import { renderableMapPoints } from "./map-utils.mjs";
+import { normalizePlaceSearchResults, renderableMapPoints } from "./map-utils.mjs";
 
 const app = document.querySelector("#app");
 const state = {
@@ -10,6 +10,7 @@ const state = {
   selected: null,
   draft: null,
   searchedPlace: null,
+  searchResults: [],
   searchQuery: "",
   isSearchingPlace: false,
   filters: { keyword: "", revisitStatus: "all" },
@@ -18,7 +19,6 @@ const state = {
 };
 
 let amapLoaderPromise = null;
-let placeSearchTimer = null;
 let placeSearchRequest = 0;
 
 const statusText = {
@@ -93,25 +93,14 @@ async function loadAmap() {
   return amapLoaderPromise;
 }
 
-async function searchAmapPlace(placeName) {
+async function searchAmapPlaces(placeName) {
   const AMap = await loadAmap();
-  if (!AMap || !placeName.trim()) return null;
+  if (!AMap || !placeName.trim()) return [];
   return new Promise((resolve) => {
-    const placeSearch = new AMap.PlaceSearch({ city: "全国", pageSize: 1 });
+    const placeSearch = new AMap.PlaceSearch({ city: "全国", pageSize: 8 });
     placeSearch.search(placeName.trim(), (status, result) => {
-      const poi = status === "complete" ? result?.poiList?.pois?.[0] : null;
-      if (!poi?.location) {
-        resolve(null);
-        return;
-      }
-      const city = Array.isArray(poi.cityname) ? poi.cityname[0] : poi.cityname;
-      const district = Array.isArray(poi.adname) ? poi.adname[0] : poi.adname;
-      resolve({
-        placeName: poi.name || placeName,
-        latitude: Number(poi.location.lat),
-        longitude: Number(poi.location.lng),
-        city: city || district || ""
-      });
+      const pois = status === "complete" ? result?.poiList?.pois || [] : [];
+      resolve(normalizePlaceSearchResults(pois, placeName));
     });
   });
 }
@@ -179,11 +168,12 @@ async function mountAmapMap(memories) {
   }
 }
 
-async function locatePlaceFromSearch(query, options = {}) {
+async function searchPlaceCandidates(query) {
   const placeName = query.trim();
   if (!placeName) {
     state.searchQuery = "";
     state.searchedPlace = null;
+    state.searchResults = [];
     state.isSearchingPlace = false;
     renderMap();
     return;
@@ -192,14 +182,17 @@ async function locatePlaceFromSearch(query, options = {}) {
   const requestId = ++placeSearchRequest;
   state.searchQuery = placeName;
   state.isSearchingPlace = true;
-  if (options.renderLoading) renderMap();
+  state.searchResults = [];
+  state.searchedPlace = null;
+  renderMap();
 
-  const amapPlace = state.config.hasAmapConfig ? await searchAmapPlace(placeName) : null;
+  const candidates = state.config.hasAmapConfig ? await searchAmapPlaces(placeName) : [];
   if (requestId !== placeSearchRequest) return;
 
   state.isSearchingPlace = false;
-  if (state.config.hasAmapConfig && !amapPlace) {
+  if (state.config.hasAmapConfig && !candidates.length) {
     state.searchedPlace = null;
+    state.searchResults = [];
     state.error = "没有搜到这个店铺，换一个更完整的店名或加上城市试试。";
     renderMap();
     return;
@@ -207,23 +200,18 @@ async function locatePlaceFromSearch(query, options = {}) {
 
   state.selected = null;
   state.error = "";
-  state.searchedPlace = amapPlace || { placeName, latitude: 30.266, longitude: 120.161, city: "" };
+  state.searchResults = candidates.length ? candidates : [{ id: "manual", placeName, latitude: 30.266, longitude: 120.161, city: "", district: "", address: "" }];
   renderMap();
 }
 
-function schedulePlaceSearch(query) {
-  state.searchQuery = query;
-  window.clearTimeout(placeSearchTimer);
-  if (!state.config.hasAmapConfig) return;
-  if (query.trim().length < 2) {
-    state.searchedPlace = null;
-    state.error = "";
-    renderMap();
-    return;
-  }
-  placeSearchTimer = window.setTimeout(() => {
-    locatePlaceFromSearch(query, { renderLoading: true });
-  }, 650);
+function chooseSearchResult(placeId) {
+  const place = state.searchResults.find((item) => item.id === placeId);
+  if (!place) return;
+  state.searchedPlace = place;
+  state.searchResults = [];
+  state.selected = null;
+  state.error = "";
+  renderMap();
 }
 
 function setSession(auth) {
@@ -376,7 +364,7 @@ function renderMap() {
         <button id="logout">退出</button>
       </header>
       <section class="map-canvas" id="mapCanvas">
-        ${useAmap ? '<div class="amap-root" id="amapRoot"></div><div class="map-hint">正在使用高德地图。搜索店名或点击地图添加记忆。</div>' : '<div class="map-hint">点击地图任意位置添加记忆；配置高德 Key 后可接入真实地图搜索。</div>'}
+        ${useAmap ? '<div class="amap-root" id="amapRoot"></div><div class="map-hint">输入完整店名后点搜索，选择候选地点即可定位。</div>' : '<div class="map-hint">点击地图任意位置添加记忆；配置高德 Key 后可接入真实地图搜索。</div>'}
         ${useAmap ? "" : state.memories
           .map(
             (memory) => `
@@ -429,11 +417,18 @@ function renderSheet(filtered) {
   return `
     <div class="search-row">
       <input id="searchPlace" aria-label="搜索店名或地点" value="${escapeHtml(state.searchQuery)}" placeholder="输入店名，地图自动定位" />
-      <button class="primary" id="useSearch">${state.config.hasAmapConfig ? "搜索定位" : "放点"}</button>
+      <button class="primary" id="useSearch">${state.config.hasAmapConfig ? "搜索" : "放点"}</button>
     </div>
     ${
       state.isSearchingPlace
         ? '<p class="muted">正在搜索店铺位置...</p>'
+        : state.searchResults.length
+          ? `<div class="search-results" role="listbox" aria-label="地点候选">${state.searchResults.map((place) => `
+              <button class="search-option" data-place-id="${escapeHtml(place.id)}" role="option">
+                <strong>${escapeHtml(place.placeName)}</strong>
+                <span>${escapeHtml([place.city, place.district, place.address].filter(Boolean).join(" · ") || "点击选择这个位置")}</span>
+              </button>
+            `).join("")}</div>`
         : state.searchedPlace
           ? `<section class="search-result"><strong>${escapeHtml(state.searchedPlace.placeName)}</strong><span>${escapeHtml(state.searchedPlace.city || "已定位到地图")}</span><button class="primary" id="addSearchedPlace">添加这家店的记忆</button></section>`
           : ""
@@ -505,16 +500,29 @@ function renderMemoryDetail(memory) {
 function bindSheetEvents() {
   document.querySelector("#useSearch")?.addEventListener("click", async () => {
     const placeName = document.querySelector("#searchPlace").value || "手动选择的位置";
-    await locatePlaceFromSearch(placeName, { renderLoading: true });
+    await searchPlaceCandidates(placeName);
   });
 
   document.querySelector("#searchPlace")?.addEventListener("input", (event) => {
-    schedulePlaceSearch(event.target.value);
+    state.searchQuery = event.target.value;
+    state.searchResults = [];
+    state.searchedPlace = null;
+  });
+
+  document.querySelector("#searchPlace")?.addEventListener("keydown", async (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    await searchPlaceCandidates(event.target.value);
+  });
+
+  document.querySelectorAll(".search-option").forEach((option) => {
+    option.addEventListener("click", () => chooseSearchResult(option.dataset.placeId));
   });
 
   document.querySelector("#addSearchedPlace")?.addEventListener("click", () => {
     state.draft = state.searchedPlace;
     state.searchedPlace = null;
+    state.searchResults = [];
     state.error = "";
     renderMap();
   });

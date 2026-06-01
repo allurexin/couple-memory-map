@@ -296,18 +296,46 @@ button {
   margin: 10px 0;
 }
 
+.search-results,
 .search-result {
   display: grid;
+  margin: 10px 0;
+}
+
+.search-results {
+  gap: 6px;
+}
+
+.search-result {
   grid-template-columns: 1fr auto;
   gap: 4px 10px;
   align-items: center;
-  margin: 10px 0;
   border: 1px solid #d8dee8;
   border-radius: 8px;
   padding: 10px;
   background: #f8fbff;
 }
 
+.search-option {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  padding: 10px;
+  color: #172033;
+  background: #fff;
+  text-align: left;
+}
+
+.search-option:hover,
+.search-option:focus-visible {
+  border-color: #1769e0;
+  background: #f8fbff;
+  outline: none;
+}
+
+.search-option span,
 .search-result span {
   color: #667085;
   font-size: 13px;
