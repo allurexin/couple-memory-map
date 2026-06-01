@@ -39,6 +39,66 @@ function routeDate(memory) {
   return `${memory.memoryDate || ""}${memory.createdAt || ""}`;
 }
 
+const provinceByCode = {
+  "11": "北京市",
+  "12": "天津市",
+  "13": "河北省",
+  "14": "山西省",
+  "15": "内蒙古自治区",
+  "21": "辽宁省",
+  "22": "吉林省",
+  "23": "黑龙江省",
+  "31": "上海市",
+  "32": "江苏省",
+  "33": "浙江省",
+  "34": "安徽省",
+  "35": "福建省",
+  "36": "江西省",
+  "37": "山东省",
+  "41": "河南省",
+  "42": "湖北省",
+  "43": "湖南省",
+  "44": "广东省",
+  "45": "广西壮族自治区",
+  "46": "海南省",
+  "50": "重庆市",
+  "51": "四川省",
+  "52": "贵州省",
+  "53": "云南省",
+  "54": "西藏自治区",
+  "61": "陕西省",
+  "62": "甘肃省",
+  "63": "青海省",
+  "64": "宁夏回族自治区",
+  "65": "新疆维吾尔自治区"
+};
+
+export function provinceNameFromAdcode(adcode = "") {
+  return provinceByCode[String(adcode).slice(0, 2)] || "";
+}
+
+export function outlineMapTarget(homeView, level = "city", context = {}) {
+  if (level === "country") {
+    return { label: "中国", level: "country", searchName: "中国" };
+  }
+
+  if (level === "province") {
+    const provinceName = context.provinceName || provinceNameFromAdcode(context.cityAdcode || context.adcode);
+    return {
+      label: provinceName || "中国",
+      level: provinceName ? "province" : "country",
+      searchName: provinceName || "中国"
+    };
+  }
+
+  const city = context.cityName || homeView.city || "";
+  return {
+    label: city || "中国",
+    level: city ? "city" : "country",
+    searchName: city || "中国"
+  };
+}
+
 export function homeMapView(memories = []) {
   if (!memories.length) return { city: "", memories: [], route: [] };
 

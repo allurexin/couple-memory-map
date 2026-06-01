@@ -3,6 +3,8 @@ import {
   homeMapView,
   mapPresentation,
   normalizePlaceSearchResults,
+  outlineMapTarget,
+  provinceNameFromAdcode,
   renderableMapPoints
 } from "./map-utils.mjs";
 
@@ -18,6 +20,8 @@ const state = {
   searchResults: [],
   searchQuery: "",
   isSearchingPlace: false,
+  outlineLevel: "city",
+  outlineContext: {},
   filters: { keyword: "", revisitStatus: "all" },
   config: { hasAmapConfig: false, amapKey: "", amapSecurityCode: "" },
   error: ""
@@ -25,6 +29,7 @@ const state = {
 
 let amapLoaderPromise = null;
 let placeSearchRequest = 0;
+const boundaryCache = new Map();
 
 const statusText = {
   again: "想再去",
@@ -92,7 +97,7 @@ async function loadAmap() {
       .then(() => window.AMapLoader.load({
         key: state.config.amapKey,
         version: "2.0",
-        plugins: ["AMap.PlaceSearch", "AMap.Scale", "AMap.DistrictLayer"]
+        plugins: ["AMap.PlaceSearch", "AMap.Scale", "AMap.DistrictLayer", "AMap.DistrictSearch"]
       }));
   }
   return amapLoaderPromise;
@@ -119,6 +124,240 @@ function createAmapMarkerContent(point) {
 
 function placeLabel(place) {
   return [place.city, place.district, place.address].filter(Boolean).join(" · ");
+}
+
+function sortedRoute(memories) {
+  return [...memories].sort((a, b) => `${a.memoryDate || ""}${a.createdAt || ""}`.localeCompare(`${b.memoryDate || ""}${b.createdAt || ""}`));
+}
+
+function parseBoundary(boundary) {
+  if (Array.isArray(boundary)) {
+    return boundary
+      .map((point) => {
+        if (Array.isArray(point)) return point.map(Number);
+        if (typeof point?.getLng === "function" && typeof point?.getLat === "function") return [Number(point.getLng()), Number(point.getLat())];
+        if ("lng" in point && "lat" in point) return [Number(point.lng), Number(point.lat)];
+        return [Number(point[0]), Number(point[1])];
+      })
+      .filter(([lng, lat]) => Number.isFinite(lng) && Number.isFinite(lat));
+  }
+  return boundary
+    .toString()
+    .split(";")
+    .map((point) => point.split(",").map(Number))
+    .filter(([lng, lat]) => Number.isFinite(lng) && Number.isFinite(lat));
+}
+
+function outlineBounds(polygons) {
+  const points = polygons.flat();
+  if (!points.length) return null;
+  return points.reduce((bounds, [lng, lat]) => ({
+    minLng: Math.min(bounds.minLng, lng),
+    maxLng: Math.max(bounds.maxLng, lng),
+    minLat: Math.min(bounds.minLat, lat),
+    maxLat: Math.max(bounds.maxLat, lat)
+  }), {
+    minLng: Infinity,
+    maxLng: -Infinity,
+    minLat: Infinity,
+    maxLat: -Infinity
+  });
+}
+
+function createProjector(bounds) {
+  const width = 1000;
+  const height = 700;
+  const padding = 54;
+  const lngSpan = bounds.maxLng - bounds.minLng || 1;
+  const latSpan = bounds.maxLat - bounds.minLat || 1;
+  const scale = Math.min((width - padding * 2) / lngSpan, (height - padding * 2) / latSpan);
+  const mapWidth = lngSpan * scale;
+  const mapHeight = latSpan * scale;
+  const offsetX = (width - mapWidth) / 2;
+  const offsetY = (height - mapHeight) / 2;
+
+  return ([lng, lat]) => [
+    offsetX + (lng - bounds.minLng) * scale,
+    offsetY + (bounds.maxLat - lat) * scale
+  ];
+}
+
+function pathFromPoints(points, project) {
+  if (!points.length) return "";
+  return points
+    .map((point, index) => {
+      const [x, y] = project(point);
+      return `${index === 0 ? "M" : "L"}${x.toFixed(2)} ${y.toFixed(2)}`;
+    })
+    .join(" ");
+}
+
+function memoryPoint(memory, project) {
+  const [x, y] = project([Number(memory.longitude), Number(memory.latitude)]);
+  return { x, y };
+}
+
+function renderOutlineSvg(boundary, memories, route, target) {
+  const polygons = boundary.boundaries.map(parseBoundary).filter((points) => points.length > 2);
+  const bounds = outlineBounds(polygons);
+  if (!bounds) return "<div class=\"outline-empty\">暂时没有拿到这个区域的轮廓。</div>";
+  const project = createProjector(bounds);
+  const routePoints = route
+    .filter((memory) => Number.isFinite(Number(memory.longitude)) && Number.isFinite(Number(memory.latitude)))
+    .map((memory) => [Number(memory.longitude), Number(memory.latitude)]);
+  const routePath = pathFromPoints(routePoints, project);
+
+  const markerHtml = memories.map((memory) => {
+    const point = memoryPoint(memory, project);
+    return `
+      <button class="outline-point-wrap" data-id="${escapeHtml(memory.id)}" style="left:${point.x / 10}%;top:${point.y / 7}%">
+        <span class="outline-point ${memory.revisitStatus}">${escapeHtml(memory.rating)}</span>
+        <small>${escapeHtml(memory.placeName)}</small>
+      </button>
+    `;
+  }).join("");
+
+  return `
+    <div class="outline-viewport">
+      <svg class="outline-svg" viewBox="0 0 1000 700" role="img" aria-label="${escapeHtml(target.label)}足迹地图">
+        <defs>
+          <linearGradient id="outlineFill" x1="0" x2="1" y1="0" y2="1">
+            <stop offset="0%" stop-color="#e9f7ef" />
+            <stop offset="100%" stop-color="#dbeafe" />
+          </linearGradient>
+        </defs>
+        <g class="outline-region">
+          ${polygons.map((polygon) => `<path d="${pathFromPoints(polygon, project)} Z" />`).join("")}
+        </g>
+        ${routePath ? `<path class="outline-route" d="${routePath}" />` : ""}
+      </svg>
+      <div class="outline-points">${markerHtml}</div>
+    </div>
+  `;
+}
+
+function outlineControls(homeView) {
+  const provinceName = state.outlineContext.provinceName || provinceNameFromAdcode(state.outlineContext.cityAdcode || state.outlineContext.adcode);
+  const buttons = [
+    { level: "country", label: "中国" },
+    ...(provinceName ? [{ level: "province", label: provinceName }] : []),
+    ...(homeView.city ? [{ level: "city", label: homeView.city }] : [])
+  ];
+  return buttons.map((item) => `
+    <button class="${state.outlineLevel === item.level ? "active" : ""}" data-outline-level="${item.level}">
+      ${escapeHtml(item.label)}
+    </button>
+  `).join("");
+}
+
+function updateOutlineContext(target, district) {
+  if (!district) return;
+  if (target.level === "city") {
+    state.outlineContext = {
+      ...state.outlineContext,
+      cityName: district.name || target.label,
+      cityAdcode: district.adcode || state.outlineContext.cityAdcode,
+      provinceName: provinceNameFromAdcode(district.adcode)
+    };
+  }
+  if (target.level === "province") {
+    state.outlineContext = {
+      ...state.outlineContext,
+      provinceName: district.name || target.label,
+      adcode: district.adcode || state.outlineContext.adcode
+    };
+  }
+}
+
+async function searchDistrictBoundary(target) {
+  const key = `${target.level}:${target.searchName}`;
+  if (boundaryCache.has(key)) return boundaryCache.get(key);
+  const AMap = await loadAmap();
+  if (!AMap?.DistrictSearch) return null;
+
+  const boundary = await new Promise((resolve) => {
+    const search = new AMap.DistrictSearch({
+      extensions: "all",
+      level: target.level,
+      subdistrict: 0
+    });
+    search.search(target.searchName, (status, result) => {
+      const district = status === "complete" ? result?.districtList?.[0] : null;
+      if (!district?.boundaries?.length) {
+        resolve(null);
+        return;
+      }
+      resolve({
+        name: district.name,
+        adcode: district.adcode,
+        boundaries: district.boundaries
+      });
+    });
+  });
+  if (boundary) boundaryCache.set(key, boundary);
+  return boundary;
+}
+
+async function mountOutlineMap(filtered, homeView) {
+  const root = document.querySelector("#outlineMap");
+  if (!root) return;
+  const target = outlineMapTarget(homeView, state.outlineLevel, state.outlineContext);
+  const memories = target.level === "city" ? homeView.memories : filtered;
+  const route = target.level === "city" ? homeView.route : sortedRoute(filtered);
+
+  root.innerHTML = `
+    <div class="outline-stage loading">
+      <div class="outline-topbar">
+        <div>
+          <strong>${escapeHtml(target.label)}</strong>
+          <span>${target.level === "city" ? "常去城市" : "足迹层级"}</span>
+        </div>
+        <nav>${outlineControls(homeView)}</nav>
+      </div>
+      <div class="outline-loading">正在勾勒地图轮廓...</div>
+    </div>
+  `;
+
+  try {
+    const boundary = await searchDistrictBoundary(target);
+    if (!document.body.contains(root)) return;
+    if (boundary) updateOutlineContext(target, boundary);
+    root.innerHTML = `
+      <div class="outline-stage">
+        <div class="outline-topbar">
+          <div>
+            <strong>${escapeHtml(boundary?.name || target.label)}</strong>
+            <span>${memories.length} 个打卡点 · ${route.length > 1 ? "已连接美食路径" : "等待更多足迹"}</span>
+          </div>
+          <nav>${outlineControls(homeView)}</nav>
+        </div>
+        ${boundary ? renderOutlineSvg(boundary, memories, route, target) : "<div class=\"outline-empty\">这个区域暂时没有边界数据。</div>"}
+      </div>
+    `;
+    bindOutlineEvents();
+  } catch (error) {
+    root.innerHTML = `<div class="outline-empty">地图轮廓加载失败：${escapeHtml(error.message || "请稍后重试")}</div>`;
+  }
+}
+
+function bindOutlineEvents() {
+  document.querySelectorAll("[data-outline-level]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.outlineLevel = button.dataset.outlineLevel;
+      state.selected = null;
+      state.draft = null;
+      state.searchedPlace = null;
+      renderMap();
+    });
+  });
+  document.querySelectorAll(".outline-point-wrap").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selected = state.memories.find((memory) => memory.id === button.dataset.id);
+      state.draft = null;
+      state.searchedPlace = null;
+      renderMap();
+    });
+  });
 }
 
 function addDistrictBoundaryLayer(AMap, map, memories) {
@@ -407,6 +646,7 @@ function renderMap() {
   const activePlace = state.selected || state.draft || state.searchedPlace;
   const mapMemories = activePlace ? filtered : homeView.memories;
   const route = activePlace ? [] : homeView.route;
+  const showOutlineHome = useAmap && !activePlace;
   app.innerHTML = `
     <main class="map-screen">
       <header class="map-header">
@@ -417,7 +657,9 @@ function renderMap() {
         <button id="logout">退出</button>
       </header>
       <section class="map-canvas" id="mapCanvas">
-        ${useAmap ? `<div class="amap-root" id="amapRoot"></div><div class="map-hint">${homeView.city && !activePlace ? `足迹地图：${escapeHtml(homeView.city)} · 简化边界 · ${homeView.memories.length} 个打卡点` : "输入完整店名后点搜索，选择候选地点即可定位。"}</div>` : '<div class="map-hint">点击地图任意位置添加记忆；配置高德 Key 后可接入真实地图搜索。</div>'}
+        ${showOutlineHome ? '<div class="outline-map" id="outlineMap"></div>' : ""}
+        ${useAmap && activePlace ? '<div class="amap-root" id="amapRoot"></div><div class="map-hint">输入完整店名后点搜索，选择候选地点即可定位。</div>' : ""}
+        ${!useAmap ? '<div class="map-hint">点击地图任意位置添加记忆；配置高德 Key 后可接入真实地图搜索。</div>' : ""}
         ${useAmap ? "" : state.memories
           .map(
             (memory) => `
@@ -433,7 +675,9 @@ function renderMap() {
   `;
 
   document.querySelector("#logout").addEventListener("click", logout);
-  if (useAmap) {
+  if (showOutlineHome) {
+    mountOutlineMap(filtered, homeView);
+  } else if (useAmap) {
     mountAmapMap(mapMemories, route, Boolean(activePlace));
   } else {
     document.querySelector("#mapCanvas").addEventListener("click", (event) => {

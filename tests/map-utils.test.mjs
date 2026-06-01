@@ -4,6 +4,8 @@ import {
   homeMapView,
   mapPresentation,
   normalizePlaceSearchResults,
+  outlineMapTarget,
+  provinceNameFromAdcode,
   renderableMapPoints
 } from "../app/public/map-utils.mjs";
 
@@ -119,6 +121,27 @@ describe("mapPresentation", () => {
     assert.deepEqual(mapPresentation(true), {
       mapStyle: "amap://styles/normal",
       features: ["bg", "road", "building", "point"]
+    });
+  });
+});
+
+describe("outline map hierarchy", () => {
+  it("derives province names from city or district adcodes", () => {
+    assert.equal(provinceNameFromAdcode("340100"), "安徽省");
+    assert.equal(provinceNameFromAdcode("340104"), "安徽省");
+  });
+
+  it("prioritizes the most frequent city as the home outline map", () => {
+    const target = outlineMapTarget(
+      { city: "合肥市", memories: [], route: [] },
+      "city",
+      { cityName: "合肥市", cityAdcode: "340100" }
+    );
+
+    assert.deepEqual(target, {
+      label: "合肥市",
+      level: "city",
+      searchName: "合肥市"
     });
   });
 });
