@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   homeMapView,
+  mapPresentation,
   normalizePlaceSearchResults,
   renderableMapPoints
 } from "../app/public/map-utils.mjs";
@@ -106,5 +107,18 @@ describe("homeMapView", () => {
     assert.equal(view.city, "合肥市");
     assert.deepEqual(view.memories.map((memory) => memory.id), ["1", "3"]);
     assert.deepEqual(view.route.map((memory) => memory.id), ["3", "1"]);
+  });
+});
+
+describe("mapPresentation", () => {
+  it("uses simplified boundary-like map features on the home map and detailed features while choosing a shop", () => {
+    assert.deepEqual(mapPresentation(false), {
+      mapStyle: "amap://styles/whitesmoke",
+      features: ["bg"]
+    });
+    assert.deepEqual(mapPresentation(true), {
+      mapStyle: "amap://styles/normal",
+      features: ["bg", "road", "building", "point"]
+    });
   });
 });

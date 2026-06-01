@@ -1,6 +1,10 @@
 import { filterMemories } from "./filter.mjs";
-import { normalizePlaceSearchResults, renderableMapPoints } from "./map-utils.mjs";
-import { homeMapView } from "./map-utils.mjs";
+import {
+  homeMapView,
+  mapPresentation,
+  normalizePlaceSearchResults,
+  renderableMapPoints
+} from "./map-utils.mjs";
 
 const app = document.querySelector("#app");
 const state = {
@@ -117,7 +121,7 @@ function placeLabel(place) {
   return [place.city, place.district, place.address].filter(Boolean).join(" · ");
 }
 
-async function mountAmapMap(memories, route = []) {
+async function mountAmapMap(memories, route = [], hasActivePlace = false) {
   const root = document.querySelector("#amapRoot");
   if (!root) return;
   try {
@@ -127,11 +131,15 @@ async function mountAmapMap(memories, route = []) {
     const center = centerMemory ? [Number(centerMemory.longitude), Number(centerMemory.latitude)] : [120.161, 30.266];
     const points = renderableMapPoints(memories, state.draft, state.searchedPlace);
     const shouldFitHome = !state.selected && !state.draft && !state.searchedPlace;
+    const presentation = mapPresentation(hasActivePlace);
     const map = new AMap.Map(root, {
       zoom: centerMemory ? 14 : 11,
       center,
+      mapStyle: presentation.mapStyle,
+      features: presentation.features,
       viewMode: "2D"
     });
+    map.setFeatures(presentation.features);
     map.addControl(new AMap.Scale());
     const markers = [];
     points.forEach((point) => {
@@ -390,7 +398,7 @@ function renderMap() {
         <button id="logout">退出</button>
       </header>
       <section class="map-canvas" id="mapCanvas">
-        ${useAmap ? `<div class="amap-root" id="amapRoot"></div><div class="map-hint">${homeView.city && !activePlace ? `常去地图：${escapeHtml(homeView.city)} · ${homeView.memories.length} 个打卡点` : "输入完整店名后点搜索，选择候选地点即可定位。"}</div>` : '<div class="map-hint">点击地图任意位置添加记忆；配置高德 Key 后可接入真实地图搜索。</div>'}
+        ${useAmap ? `<div class="amap-root" id="amapRoot"></div><div class="map-hint">${homeView.city && !activePlace ? `足迹地图：${escapeHtml(homeView.city)} · 简化边界 · ${homeView.memories.length} 个打卡点` : "输入完整店名后点搜索，选择候选地点即可定位。"}</div>` : '<div class="map-hint">点击地图任意位置添加记忆；配置高德 Key 后可接入真实地图搜索。</div>'}
         ${useAmap ? "" : state.memories
           .map(
             (memory) => `
@@ -407,7 +415,7 @@ function renderMap() {
 
   document.querySelector("#logout").addEventListener("click", logout);
   if (useAmap) {
-    mountAmapMap(mapMemories, route);
+    mountAmapMap(mapMemories, route, Boolean(activePlace));
   } else {
     document.querySelector("#mapCanvas").addEventListener("click", (event) => {
       if (event.target.closest(".pin")) return;

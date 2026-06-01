@@ -63,6 +63,20 @@ export function homeMapView(memories = []) {
   return { city, memories: homeMemories, route };
 }
 
+export function mapPresentation(hasActivePlace = false) {
+  if (hasActivePlace) {
+    return {
+      mapStyle: "amap://styles/normal",
+      features: ["bg", "road", "building", "point"]
+    };
+  }
+
+  return {
+    mapStyle: "amap://styles/whitesmoke",
+    features: ["bg"]
+  };
+}
+
 export function renderableMapPoints(memories = [], draft = null, searchedPlace = null) {
   const memoryPoints = memories.map((memory) => ({
     id: memory.id,
