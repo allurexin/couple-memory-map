@@ -73,8 +73,59 @@ const provinceByCode = {
   "65": "新疆维吾尔自治区"
 };
 
+const cityProvinceHints = {
+  "合肥": "安徽省",
+  "芜湖": "安徽省",
+  "杭州": "浙江省",
+  "宁波": "浙江省",
+  "南京": "江苏省",
+  "苏州": "江苏省",
+  "上海": "上海市",
+  "北京": "北京市",
+  "广州": "广东省",
+  "深圳": "广东省",
+  "成都": "四川省",
+  "重庆": "重庆市",
+  "武汉": "湖北省",
+  "长沙": "湖南省",
+  "西安": "陕西省"
+};
+
 export function provinceNameFromAdcode(adcode = "") {
   return provinceByCode[String(adcode).slice(0, 2)] || "";
+}
+
+export function provinceNameFromMemory(memory = {}) {
+  const direct = provinceNameFromAdcode(memory.adcode || memory.cityAdcode || memory.districtAdcode);
+  if (direct) return direct;
+  const text = [memory.city, memory.district, memory.address].filter(Boolean).join(" ");
+  const province = Object.values(provinceByCode).find((name) => text.includes(name.replace(/省|市|自治区|壮族|回族|维吾尔/g, "")) || text.includes(name));
+  if (province) return province;
+  const hinted = Object.entries(cityProvinceHints).find(([city]) => text.includes(city));
+  return hinted?.[1] || "";
+}
+
+export function provinceStats(memories = []) {
+  const groups = new Map();
+  memories.forEach((memory) => {
+    const province = provinceNameFromMemory(memory);
+    if (!province) return;
+    const current = groups.get(province) || [];
+    current.push(memory);
+    groups.set(province, current);
+  });
+
+  return [...groups.entries()]
+    .map(([province, items]) => {
+      const latest = [...items].sort((a, b) => routeDate(b).localeCompare(routeDate(a)))[0] || {};
+      return {
+        province,
+        count: items.length,
+        latestCity: cityName(latest),
+        latestPlace: latest.placeName || ""
+      };
+    })
+    .sort((a, b) => b.count - a.count || a.province.localeCompare(b.province));
 }
 
 export function outlineMapTarget(homeView, level = "city", context = {}) {

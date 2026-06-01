@@ -4,6 +4,7 @@ import {
   mapPresentation,
   normalizePlaceSearchResults,
   outlineMapTarget,
+  provinceStats,
   provinceNameFromAdcode,
   renderableMapPoints
 } from "./map-utils.mjs";
@@ -207,11 +208,12 @@ function renderOutlineSvg(boundary, memories, route, target) {
     .map((memory) => [Number(memory.longitude), Number(memory.latitude)]);
   const routePath = pathFromPoints(routePoints, project);
 
-  const markerHtml = memories.map((memory) => {
+  const markerHtml = memories.map((memory, index) => {
     const point = memoryPoint(memory, project);
     return `
       <button class="outline-point-wrap" data-id="${escapeHtml(memory.id)}" style="left:${point.x / 10}%;top:${point.y / 7}%">
         <span class="outline-point ${memory.revisitStatus}">${escapeHtml(memory.rating)}</span>
+        <i>${index + 1}</i>
         <small>${escapeHtml(memory.placeName)}</small>
       </button>
     `;
@@ -243,8 +245,9 @@ function outlineControls(homeView) {
     ...(provinceName ? [{ level: "province", label: provinceName }] : []),
     ...(homeView.city ? [{ level: "city", label: homeView.city }] : [])
   ];
-  return buttons.map((item) => `
+  return buttons.map((item, index) => `
     <button class="${state.outlineLevel === item.level ? "active" : ""}" data-outline-level="${item.level}">
+      <span>${index + 1}</span>
       ${escapeHtml(item.label)}
     </button>
   `).join("");
@@ -279,7 +282,7 @@ async function searchDistrictBoundary(target) {
     const search = new AMap.DistrictSearch({
       extensions: "all",
       level: target.level,
-      subdistrict: 0
+      subdistrict: target.level === "city" ? 0 : 1
     });
     search.search(target.searchName, (status, result) => {
       const district = status === "complete" ? result?.districtList?.[0] : null;
@@ -290,12 +293,54 @@ async function searchDistrictBoundary(target) {
       resolve({
         name: district.name,
         adcode: district.adcode,
-        boundaries: district.boundaries
+        boundaries: district.boundaries,
+        children: district.districtList || []
       });
     });
   });
   if (boundary) boundaryCache.set(key, boundary);
   return boundary;
+}
+
+function provinceInfoCards(memories, boundary, target) {
+  const stats = provinceStats(memories);
+  const statsByProvince = new Map(stats.map((item) => [item.province, item]));
+  const children = boundary?.children || [];
+
+  if (target.level === "country") {
+    const cards = children.map((child) => {
+      const stat = statsByProvince.get(child.name);
+      return { name: child.name, adcode: child.adcode, count: stat?.count || 0, latest: stat?.latestPlace || stat?.latestCity || "还没有足迹" };
+    }).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    return renderOutlineCards(cards, "province");
+  }
+
+  if (target.level === "province") {
+    const cards = children.map((child) => {
+      const cityMemories = memories.filter((memory) => (memory.city || "").includes(child.name.replace(/市|地区|自治州/g, "")));
+      return { name: child.name, adcode: child.adcode, count: cityMemories.length, latest: cityMemories[0]?.placeName || "点击查看城市轮廓" };
+    }).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    return renderOutlineCards(cards, "city");
+  }
+
+  return "";
+}
+
+function renderOutlineCards(cards, nextLevel) {
+  if (!cards.length) return "";
+  return `
+    <div class="outline-drill-panel">
+      <strong>${nextLevel === "province" ? "省份足迹" : "城市下钻"}</strong>
+      <div>
+        ${cards.slice(0, 12).map((card) => `
+          <button class="${card.count ? "has-visits" : ""}" data-drill-level="${nextLevel}" data-drill-name="${escapeHtml(card.name)}" data-drill-adcode="${escapeHtml(card.adcode || "")}">
+            <span>${escapeHtml(card.name)}</span>
+            <small>${card.count ? `${card.count} 次 · ${escapeHtml(card.latest)}` : escapeHtml(card.latest)}</small>
+          </button>
+        `).join("")}
+      </div>
+    </div>
+  `;
 }
 
 async function mountOutlineMap(filtered, homeView) {
@@ -332,6 +377,7 @@ async function mountOutlineMap(filtered, homeView) {
           <nav>${outlineControls(homeView)}</nav>
         </div>
         ${boundary ? renderOutlineSvg(boundary, memories, route, target) : "<div class=\"outline-empty\">这个区域暂时没有边界数据。</div>"}
+        ${boundary ? provinceInfoCards(filtered, boundary, target) : ""}
       </div>
     `;
     bindOutlineEvents();
@@ -353,6 +399,24 @@ function bindOutlineEvents() {
   document.querySelectorAll(".outline-point-wrap").forEach((button) => {
     button.addEventListener("click", () => {
       state.selected = state.memories.find((memory) => memory.id === button.dataset.id);
+      state.draft = null;
+      state.searchedPlace = null;
+      renderMap();
+    });
+  });
+  document.querySelectorAll("[data-drill-level]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.outlineLevel = button.dataset.drillLevel;
+      if (state.outlineLevel === "province") {
+        state.outlineContext.provinceName = button.dataset.drillName;
+        state.outlineContext.adcode = button.dataset.drillAdcode;
+      }
+      if (state.outlineLevel === "city") {
+        state.outlineContext.cityName = button.dataset.drillName;
+        state.outlineContext.cityAdcode = button.dataset.drillAdcode;
+        state.outlineContext.provinceName = provinceNameFromAdcode(button.dataset.drillAdcode) || state.outlineContext.provinceName;
+      }
+      state.selected = null;
       state.draft = null;
       state.searchedPlace = null;
       renderMap();

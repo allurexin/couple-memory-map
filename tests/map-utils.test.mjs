@@ -5,6 +5,7 @@ import {
   mapPresentation,
   normalizePlaceSearchResults,
   outlineMapTarget,
+  provinceStats,
   provinceNameFromAdcode,
   renderableMapPoints
 } from "../app/public/map-utils.mjs";
@@ -142,6 +143,21 @@ describe("outline map hierarchy", () => {
       label: "合肥市",
       level: "city",
       searchName: "合肥市"
+    });
+  });
+
+  it("summarizes province visit stats for the country outline", () => {
+    const stats = provinceStats([
+      { id: "1", city: "合肥市", placeName: "大众酸菜鱼", memoryDate: "2026-06-01", createdAt: "2026-06-01T00:00:00.000Z" },
+      { id: "2", city: "杭州市", placeName: "武林夜市", memoryDate: "2026-05-31", createdAt: "2026-05-31T00:00:00.000Z" },
+      { id: "3", city: "安徽合肥", placeName: "小馆子", memoryDate: "2026-06-02", createdAt: "2026-06-02T00:00:00.000Z" }
+    ]);
+
+    assert.deepEqual(stats[0], {
+      province: "安徽省",
+      count: 2,
+      latestCity: "安徽合肥",
+      latestPlace: "小馆子"
     });
   });
 });
